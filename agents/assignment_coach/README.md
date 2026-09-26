@@ -58,7 +58,7 @@ GEMINI_API_KEY=your_api_key_here
 The `.env` file should look like this:
 
 ```
-GEMINI_API_KEY=AIzaSyCA5LS4JosheBjxJPBmU1uI2U0BqT7mf4I
+GEMINI_API_KEY=YOUR_GEMINI_API_KEY
 ```
 
 ⚠️ **Note:** Without a valid Gemini API key, the Assignment Coach will return generic responses instead of AI-powered, assignment-specific guidance.

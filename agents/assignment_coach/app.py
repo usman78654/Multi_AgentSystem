@@ -26,7 +26,7 @@ else:
 # Log API key status (first 20 chars only for security)
 api_key = os.getenv('GEMINI_API_KEY', '')
 if api_key:
-    _logger.info(f"✅ GEMINI_API_KEY loaded: {api_key[:20]}...")
+    _logger.info("GEMINI_API_KEY configured")
 else:
     _logger.warning("⚠️  GEMINI_API_KEY not found in environment")
 

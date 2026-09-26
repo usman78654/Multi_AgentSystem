@@ -8,7 +8,6 @@ __pycache__/
 *.so
 
 venv/
-.github/
 Instructions/
 # Distribution / packaging
 .Python
@@ -136,3 +135,13 @@ ltm_gemini.db
 ltm_assignment_coach/
 *.db
 *.db-journal
+
+# Cloud runtime
+.env.cloud
+.cloud-venv/
+*.db-wal
+*.db-shm
+
+.ruff_cache/
+
+agents-backup.sql

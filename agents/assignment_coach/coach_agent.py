@@ -1,35 +1,15 @@
 import json
 import logging
 import os
-from datetime import datetime, timedelta
+from datetime import datetime, timezone
 from typing import Dict, Any, TypedDict
 from langgraph.graph import StateGraph, END
-import google.generativeai as genai
+from shared.gemini_http import cloud_enabled, generate_text
 
 _logger = logging.getLogger(__name__)
 
-# Gemini API configuration - lazy loading
-_gemini_configured = False
-
 def _configure_gemini():
-    """Configure Gemini API on first use"""
-    global _gemini_configured
-    if _gemini_configured:
-        return True
-    
-    api_key = os.getenv("GEMINI_API_KEY", "")
-    if api_key:
-        try:
-            genai.configure(api_key=api_key)
-            _gemini_configured = True
-            _logger.info(f"✅ Gemini API configured successfully (key: {api_key[:20]}...)")
-            return True
-        except Exception as e:
-            _logger.error(f"❌ Failed to configure Gemini API: {e}")
-            return False
-    else:
-        _logger.warning("⚠️ GEMINI_API_KEY not found. Using fallback mode.")
-        return False
+    return cloud_enabled()
 
 class AssignmentState(TypedDict):
     """State for the assignment coach agent"""
@@ -51,7 +31,7 @@ async def parse_input(state: AssignmentState) -> AssignmentState:
         if not payload.get("assignment_title"):
             state["error"] = "Missing assignment_title in payload"
         
-        _logger.info(f"Parsed assignment: {payload.get('assignment_title')}")
+        _logger.info("Parsed assignment input")
         return state
     except Exception as e:
         state["error"] = f"Parse error: {str(e)}"
@@ -68,7 +48,6 @@ async def generate_summary(state: AssignmentState) -> AssignmentState:
         
         if _configure_gemini():
             try:
-                model = genai.GenerativeModel('gemini-2.5-flash')
                 prompt = f"""Create a concise 2-3 sentence summary for this assignment:
 Title: {title}
 Description: {description}
@@ -77,9 +56,11 @@ Difficulty: {difficulty}
 
 Focus on the key learning objectives and core components the student needs to understand."""
                 
-                response = model.generate_content(prompt)
-                state["assignment_summary"] = response.text.strip()
+                response_text = await generate_text(prompt)
+                state["assignment_summary"] = response_text.strip()
             except Exception as e:
+                if os.getenv("AGENT_MODE") == "cloud":
+                    raise
                 _logger.warning(f"Gemini API failed: {e}, using fallback")
                 state["assignment_summary"] = f"This {difficulty.lower()} level assignment on {subject} focuses on {title}. {description}"
         else:
@@ -105,7 +86,6 @@ async def create_task_plan(state: AssignmentState) -> AssignmentState:
         
         if _configure_gemini():
             try:
-                model = genai.GenerativeModel('gemini-2.5-flash')
                 prompt = f"""Create a detailed 4-step task plan for this assignment:
 Title: {title}
 Description: {description}
@@ -124,8 +104,8 @@ Generate EXACTLY 4 tasks with realistic time estimates. Format as JSON array:
 
 Make tasks specific to the assignment, not generic. Consider the difficulty level."""
                 
-                response = model.generate_content(prompt)
-                text = response.text.strip()
+                response_text = await generate_text(prompt)
+                text = response_text.strip()
                 
                 # Extract JSON from response
                 if "```json" in text:
@@ -136,6 +116,8 @@ Make tasks specific to the assignment, not generic. Consider the difficulty leve
                 tasks = json.loads(text)
                 state["task_plan"] = tasks
             except Exception as e:
+                if os.getenv("AGENT_MODE") == "cloud":
+                    raise
                 _logger.warning(f"Gemini task plan failed: {e}, using fallback")
                 time_multiplier = {"Beginner": 1, "Intermediate": 1.5, "Advanced": 2}.get(difficulty, 1.5)
                 state["task_plan"] = [
@@ -170,7 +152,6 @@ async def recommend_resources(state: AssignmentState) -> AssignmentState:
         
         if _configure_gemini():
             try:
-                model = genai.GenerativeModel('gemini-2.5-flash')
                 prompt = f"""Recommend 3 specific learning resources for this assignment:
 Assignment: {title}
 Subject: {subject}
@@ -185,8 +166,8 @@ Generate EXACTLY 3 resources in JSON format:
 
 Prioritize {"videos and interactive content" if learning_style == "visual" else "articles and documentation" if learning_style == "reading" else "hands-on projects" if learning_style == "hands-on" else "mixed resources"}."""
                 
-                response = model.generate_content(prompt)
-                text = response.text.strip()
+                response_text = await generate_text(prompt)
+                text = response_text.strip()
                 
                 # Extract JSON
                 if "```json" in text:
@@ -197,6 +178,8 @@ Prioritize {"videos and interactive content" if learning_style == "visual" else 
                 resources = json.loads(text)
                 state["resources"] = resources
             except Exception as e:
+                if os.getenv("AGENT_MODE") == "cloud":
+                    raise
                 _logger.warning(f"Gemini resources failed: {e}, using fallback")
                 resources = []
                 if learning_style in ["visual", "mixed"]:
@@ -257,7 +240,6 @@ async def generate_feedback(state: AssignmentState) -> AssignmentState:
         
         if _configure_gemini():
             try:
-                model = genai.GenerativeModel('gemini-2.5-flash')
                 prompt = f"""Generate personalized feedback and motivation for a student:
 Assignment: {title}
 Progress: {progress_pct}%
@@ -275,8 +257,8 @@ Format as JSON:
   "motivation": "specific tip for their weakness"
 }}"""
                 
-                response = model.generate_content(prompt)
-                text = response.text.strip()
+                response_text = await generate_text(prompt)
+                text = response_text.strip()
                 
                 # Extract JSON
                 if "```json" in text:
@@ -288,6 +270,8 @@ Format as JSON:
                 state["feedback"] = result.get("feedback", f"You have completed {progress_pct}% of your work.")
                 state["motivation"] = result.get("motivation", "Stay focused and break tasks into manageable chunks!")
             except Exception as e:
+                if os.getenv("AGENT_MODE") == "cloud":
+                    raise
                 _logger.warning(f"Gemini feedback failed: {e}, using fallback")
                 state["feedback"] = f"You have completed {progress_pct}% of your work. "
                 
@@ -344,10 +328,10 @@ def create_workflow():
     
     # Define edges
     workflow.set_entry_point("parse")
-    workflow.add_edge("parse", "summary")
-    workflow.add_edge("summary", "tasks")
-    workflow.add_edge("tasks", "resources")
-    workflow.add_edge("resources", "feedback")
+    workflow.add_conditional_edges("parse", should_continue, {"continue": "summary", "end": END})
+    workflow.add_conditional_edges("summary", should_continue, {"continue": "tasks", "end": END})
+    workflow.add_conditional_edges("tasks", should_continue, {"continue": "resources", "end": END})
+    workflow.add_conditional_edges("resources", should_continue, {"continue": "feedback", "end": END})
     workflow.add_edge("feedback", END)
     
     return workflow.compile()
@@ -395,7 +379,7 @@ async def process_assignment_request(input_request: str) -> Dict[str, Any]:
                 "recommended_resources": final_state["resources"],
                 "feedback": final_state["feedback"],
                 "motivation": final_state["motivation"],
-                "timestamp": datetime.utcnow().isoformat() + "Z"
+                "timestamp": datetime.now(timezone.utc).isoformat()
             }
         }
         
