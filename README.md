@@ -196,6 +196,6 @@ GitHub Actions runs PostgreSQL tests, builds the Docker image, starts two worker
 - [Reliability model and tradeoffs](docs/ARCHITECTURE.md)
 - [Recruiter demo walkthrough](docs/DEMO.md)
 
-The supported cloud entry point is `cloud.api:app`. The original `supervisor/` HTTP application and other experimental agents remain available as legacy code. They are not included in the cloud image or its validation scope. New plugins are registered in `cloud/agents.py`.
+The supported cloud entry point is `cloud.api:app`. This repository focuses on the cloud runtime and the Assignment Coach and Gemini Wrapper agents it uses. New plugins are registered in `cloud/agents.py`.
 
 The load script measures local throughput; it does not claim cloud capacity or a production throughput target. This project has not been deployed to a public cloud account.
