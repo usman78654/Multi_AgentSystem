@@ -114,10 +114,16 @@ def create_app(settings=None, store=None):
         except ValidationError as exc:
             raise HTTPException(422, json.loads(exc.json(include_input=False, include_url=False)))
         try:
-            job, created = request.app.state.store.submit(
-                identity, agent, payload, body.conversation_id, idempotency_key,
-                request.app.state.settings.max_attempts,
-            )
+            if agent == "assignment-success-team":
+                job, created = request.app.state.store.submit_assignment_workflow(
+                    identity, payload, body.conversation_id, idempotency_key,
+                    request.app.state.settings.max_attempts,
+                )
+            else:
+                job, created = request.app.state.store.submit(
+                    identity, agent, payload, body.conversation_id, idempotency_key,
+                    request.app.state.settings.max_attempts,
+                )
         except Conflict as exc:
             raise HTTPException(409, str(exc))
         response.status_code = 202 if created else 200
@@ -142,6 +148,13 @@ def create_app(settings=None, store=None):
         if result is None:
             raise HTTPException(404, "Task not found")
         return result
+
+    @app.get("/api/v1/workflows/{workflow_id}", tags=["Tasks"])
+    def workflow(workflow_id: uuid.UUID, request: Request, identity=Depends(owner)):
+        result = request.app.state.store.workflow(str(workflow_id), identity)
+        if not result:
+            raise HTTPException(404, "Workflow not found")
+        return [public_job(job) for job in result]
 
     @app.post("/api/v1/tasks/{job_id}/cancel", tags=["Tasks"])
     def cancel(job_id: uuid.UUID, request: Request, identity=Depends(owner)):

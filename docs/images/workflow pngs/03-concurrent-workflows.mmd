@@ -1,0 +1,43 @@
+sequenceDiagram
+    autonumber
+
+    participant Students
+    participant API as FastAPI Supervisor
+    participant DB as PostgreSQL Queue
+    participant Coach as Coach Worker
+    participant Research as Research Worker
+    participant Schedule as Scheduler Worker
+    participant Originality as Originality Worker
+    participant Citation as Citation Worker
+    participant Reviewer as Reviewer Worker
+
+    Students->>API: Submit workflows A, B and C
+    API->>DB: Create 18 jobs atomically
+    API-->>Students: 202 Accepted + final task IDs
+
+    Coach->>DB: Claim A-Coach
+    Coach->>DB: Persist A plan
+
+    par Workflow A specialist branches
+        Research->>DB: Claim A-Research
+        Schedule->>DB: Claim A-Schedule
+        Originality->>DB: Claim A-Originality
+    and Next workflow begins
+        Coach->>DB: Claim B-Coach
+    end
+
+    Research->>DB: Persist A research strategy
+    Citation->>DB: Claim A-Citation
+    Citation->>DB: Persist A citation checklist
+
+    Schedule->>DB: Persist A schedule
+    Originality->>DB: Persist A preflight
+
+    Reviewer->>DB: Claim A-Review
+    Reviewer->>DB: Load five upstream results
+    Reviewer->>DB: Persist final A package
+
+    Note over Coach,Reviewer: The same pipeline continues for workflows B and C
+    Students->>API: Poll final task IDs
+    API->>DB: Read persisted results
+    API-->>Students: Completed workflow results

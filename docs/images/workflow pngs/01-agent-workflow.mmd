@@ -1,0 +1,45 @@
+flowchart TD
+    U["Student submits assignment"] --> API["FastAPI Supervisor"]
+    API --> V["Validate input, authentication<br/>and idempotency key"]
+    V --> DB[("PostgreSQL<br/>Create 6 durable jobs")]
+
+    DB --> C["1. Assignment Coach"]
+    C --> CP["Persist assignment plan"]
+
+    CP --> R["2. Research Scout"]
+    CP --> S["3. Study Scheduler"]
+    CP --> O["5. Originality Preflight"]
+
+    R --> RP["Persist research strategy"]
+    RP --> CM["4. Citation Manager"]
+
+    S --> SP["Persist study schedule"]
+    O --> OP["Persist originality result"]
+    CM --> CMP["Persist citation checklist"]
+
+    CP --> G{"All required stages<br/>completed?"}
+    RP --> G
+    SP --> G
+    OP --> G
+    CMP --> G
+
+    G -->|"Yes"| REV["6. Gemini Reviewer"]
+    G -->|"No"| WAIT["Remain queued"]
+    WAIT --> G
+
+    REV --> FINAL["Persist final assignment package"]
+    FINAL --> UI["Dashboard displays result,<br/>worker ownership and event history"]
+
+    classDef user fill:#172554,stroke:#60a5fa,color:#fff
+    classDef service fill:#134e4a,stroke:#5eead4,color:#fff
+    classDef agent fill:#3f3f46,stroke:#c4b5fd,color:#fff
+    classDef database fill:#422006,stroke:#fbbf24,color:#fff
+    classDef result fill:#14532d,stroke:#86efac,color:#fff
+    classDef waiting fill:#451a03,stroke:#fb923c,color:#fff
+
+    class U user
+    class API,V,UI service
+    class C,R,S,CM,O,REV agent
+    class DB,CP,RP,SP,OP,CMP database
+    class FINAL result
+    class G,WAIT waiting

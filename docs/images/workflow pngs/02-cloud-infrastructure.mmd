@@ -1,0 +1,34 @@
+flowchart LR
+    CLIENT["Browser or API Client"] -->|"POST /api/v1/tasks"| API["Stateless FastAPI API"]
+
+    API -->|"202 Accepted"| CLIENT
+    API -->|"Create workflow atomically"| DB[("PostgreSQL<br/>Queue + Results + Events")]
+
+    DB <-->|"Claim Coach jobs"| W1["Coach Worker"]
+    DB <-->|"Claim Research jobs"| W2["Research Worker"]
+    DB <-->|"Claim Schedule jobs"| W3["Scheduler Worker"]
+    DB <-->|"Claim Citation jobs"| W4["Citation Worker"]
+    DB <-->|"Claim Originality jobs"| W5["Originality Worker"]
+    DB <-->|"Claim Review jobs"| W6["Reviewer Worker"]
+
+    W1 -.->|"Cloud mode"| AI["Gemini API"]
+    W2 -.->|"Cloud mode"| AI
+    W3 -.->|"Cloud mode"| AI
+    W4 -.->|"Cloud mode"| AI
+    W5 -.->|"Cloud mode"| AI
+    W6 -.->|"Cloud mode"| AI
+
+    DB -->|"Task state and metrics"| API
+    API -->|"Polling"| DASH["Operations Dashboard"]
+
+    classDef client fill:#172554,stroke:#60a5fa,color:#fff
+    classDef api fill:#134e4a,stroke:#5eead4,color:#fff
+    classDef worker fill:#3f3f46,stroke:#c4b5fd,color:#fff
+    classDef database fill:#422006,stroke:#fbbf24,color:#fff
+    classDef external fill:#4c1d95,stroke:#c4b5fd,color:#fff
+
+    class CLIENT,DASH client
+    class API api
+    class W1,W2,W3,W4,W5,W6 worker
+    class DB database
+    class AI external
