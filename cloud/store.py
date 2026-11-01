@@ -243,13 +243,23 @@ class Store:
                 query = select(jobs).where(
                     eligible, jobs.c.agent.in_(agents),
                 ).order_by(jobs.c.created_at).limit(100)
-                if not self.sqlite:
-                    query = query.with_for_update(skip_locked=True)
+                # Discover candidates without locking the whole batch. PostgreSQL's
+                # FOR UPDATE applies to every selected row, so locking this query
+                # would let one worker reserve up to 100 jobs while returning only
+                # one of them. Lock each candidate individually below instead.
                 candidates = [dict(row) for row in conn.execute(query).mappings()]
                 if not candidates:
                     return None
                 changed_state = False
-                for row in candidates:
+                for candidate in candidates:
+                    row = candidate
+                    if not self.sqlite:
+                        locked = conn.execute(select(jobs).where(
+                            jobs.c.id == candidate["id"], eligible,
+                        ).with_for_update(skip_locked=True)).mappings().first()
+                        if locked is None:
+                            continue
+                        row = dict(locked)
                     if row["attempts"] >= row["max_attempts"]:
                         conn.execute(update(jobs).where(jobs.c.id == row["id"]).values(
                             status="dead", error="Worker lease expired; retry budget exhausted",
